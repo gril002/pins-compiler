@@ -57,7 +57,21 @@ public class Lexer {
      */
     public List<Symbol> scan() {
         var symbols = new ArrayList<Symbol>();
-        // todo: implementacija leksikalne analize
+        TokenType curToken = null;
+        int pos = 0;
+        int line = 0;
+        int column = 0;
+
+        for (pos = 0; pos < this.source.length(); pos++) {
+            char c = this.source.charAt(pos);
+            if ((c < 32 && c != '\n' && c != '\r' && c != '\t') || c == 127)
+                Report.error(Position.fromLocation(new Location(line, column)), String.format("Invalid character %c", c));
+            //if (curToken == null) {
+            //    if (Character.is)
+            //}
+            column++;
+        }
+        symbols.add(new Symbol(Position.fromLocation(new Location(line, column)), EOF, "EOF"));
         return symbols;
     }
 }
