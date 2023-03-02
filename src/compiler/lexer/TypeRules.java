@@ -10,10 +10,6 @@ public class TypeRules {
             new AbstractMap.SimpleEntry<>("if", TokenType.KW_IF), new AbstractMap.SimpleEntry<>("then", TokenType.KW_THEN),
             new AbstractMap.SimpleEntry<>("typ", TokenType.KW_TYP), new AbstractMap.SimpleEntry<>("var", TokenType.KW_VAR),
             new AbstractMap.SimpleEntry<>("where", TokenType.KW_WHERE), new AbstractMap.SimpleEntry<>("while", TokenType.KW_WHILE));
-    //Map<String, TokenType> kw = Map.of("arr", TokenType.KW_ARR, "else", TokenType.KW_ELSE, "for", TokenType.KW_FOR,
-    //        "fun", TokenType.KW_FUN, "if", TokenType.KW_IF, "then", TokenType.KW_THEN, "typ", TokenType.KW_TYP,
-    //        "var", TokenType.KW_VAR, "where", TokenType.KW_WHERE, "while", TokenType.KW_WHILE);
-    //String[] keyWords = {"arr", "else", "for", "fun", "if", "then", "typ", "var", "where", "while"};
 
     static final Map<String, TokenType> atomic = Map.ofEntries(
             new AbstractMap.SimpleEntry<>("logical", TokenType.AT_LOGICAL), new AbstractMap.SimpleEntry<>("integer", TokenType.AT_INTEGER),
@@ -63,7 +59,7 @@ public class TypeRules {
             return false;
         if (str.length() == 1)
             return true;
-        if (str.indexOf('\n') == str.length()-1)
+        if (str.charAt(str.length()-2) == '\n')
             return false;
 
         return true;
@@ -87,14 +83,15 @@ public class TypeRules {
         return atomic.get(str);
     }
     public static TokenType getAtomicConst(String str) {
-        if (str.length() == 0)
+        int len = str.length();
+        if (len == 0)
             return null;
         if (str.equals("true") || str.equals("false"))
             return atomicConst.get(str);
 
         char c = str.charAt(0);
         if (Character.isDigit(c)) {
-            for (int i = 1; i < str.length(); i++) {
+            for (int i = 1; i < len; i++) {
                 c = str.charAt(i);
                 if (c < '0' || c > '9')
                     return null;
@@ -104,14 +101,25 @@ public class TypeRules {
 
         if (c != '\'')
             return null;
-        for (int i = 1; i < str.length(); i++) {
-            if (str.charAt(i) < 32 || str.charAt(i) > 126)
-                return null;
-            // TODO check for ' escape
+        if (len == 1)
             return TokenType.C_STRING;
+        for (int i = 1; i < len; i++) {
+            if (str.charAt(i) < 32 || str.charAt(i) > 126) {
+                return null;
+            }
         }
 
-        return null;
+        int qNum = 0;
+        for (int i = 0; i < len; i++) {
+            if (str.charAt(i) == '\'')
+                qNum++;
+        }
+        if (qNum%2 == 0) {
+            if (str.charAt(len-1) != '\'')
+                return null;
+        }
+
+        return TokenType.C_STRING;
     }
     public static TokenType getId(String str) {
         if (str.length() == 0)
@@ -134,7 +142,35 @@ public class TypeRules {
     public static TokenType getOp(String str) {
         return ops.get(str);
     }
-    //public static TokenType getComment(String str) {
-    //    return
-    //}
+
+    public static String completeString(String str) {
+        int len = str.length();
+        if (len < 2)
+            return null;
+        char first = str.charAt(0);
+        char last = str.charAt(len-1);
+
+        if(first != '\'' || last != '\'')
+            return null;
+
+        int qNum = 0;
+        for (int i = 0; i < len; i++) {
+            if (str.charAt(i) == '\'')
+                qNum++;
+        }
+        if (qNum%2 == 1) {
+            return null;
+        }
+        StringBuilder compStr = new StringBuilder();
+        for (int i = 1; i < len-1; i++) {
+            if (len >= 4 && str.charAt(i) == '\'' && str.charAt(i+1) == '\'') {
+                compStr.append("'");
+                i++;
+            }
+            else
+                compStr.append(str.charAt(i));
+        }
+
+        return compStr.toString();
+    }
 }

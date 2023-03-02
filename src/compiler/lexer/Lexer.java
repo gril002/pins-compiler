@@ -9,7 +9,6 @@ import static common.RequireNonNull.requireNonNull;
 import static compiler.lexer.TokenType.*;
 import compiler.lexer.Position.Location;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +62,7 @@ public class Lexer {
         int column = 1;
         StringBuilder str = new StringBuilder();
 
-        boolean[] prevTypes = new boolean[6];
+        boolean[] prevTypes = new boolean[7];
         int prevValid = 0;
 
         while (pos <= source.length() && source.length() != 0) {
@@ -76,10 +75,17 @@ public class Lexer {
             } else
                 c = str.charAt(0);
 
+            if (c == '\n') {
+                column = 0;
+                line++;
+            } else if (c == '\t') {
+                column += 4;
+            }
+
             //if ((c < 32 || c > 126) && c != '\n' && c != '\r' && c != '\t')
             //    Report.error(Position.fromLocation(new Location(line, column)), String.format("Invalid character %c", c));
 
-            boolean[] possibleTypes = new boolean[6];
+            boolean[] possibleTypes = new boolean[7];
             boolean valid = TypeRules.isKeyWord(str.toString());
             possibleTypes[0] = valid;
             valid = TypeRules.isAtomic(str.toString());
@@ -92,6 +98,8 @@ public class Lexer {
             possibleTypes[4] = valid;
             valid = TypeRules.isComment(str.toString());
             possibleTypes[5] = valid;
+            valid = TypeRules.isWt(str.toString());
+            possibleTypes[6] = valid;
 
             int curValid = 0;
             for (boolean possibleType : possibleTypes) {
@@ -106,6 +114,7 @@ public class Lexer {
 
                     TokenType type = null;
                     String prevStr = str.substring(0, str.length()-1);
+                    int oStrLen = 0;
                     if (last) {
                         prevStr = str.toString();
                         prevTypes = possibleTypes.clone();
@@ -115,31 +124,42 @@ public class Lexer {
                         type = TypeRules.getKeyWord(prevStr);
                     else if (prevTypes[1])
                         type = TypeRules.getAtomic(prevStr);
-                    else if (prevTypes[2])
+                    else if (prevTypes[2]) {
                         type = TypeRules.getAtomicConst(prevStr);
+                        if (type == C_STRING) {
+                            oStrLen = prevStr.length();
+                            String tempStr = TypeRules.completeString(prevStr);
+                            if (tempStr == null)
+                                Report.error(new Position(new Location(line, column-oStrLen), new Location(line, column)),
+                                        String.format("Incomplete string: %s", prevStr));
+                            else
+                                prevStr = tempStr;
+                        }
+                    }
                     else if (prevTypes[3])
                         type = TypeRules.getId(prevStr);
                     else if (prevTypes[4])
                         type = TypeRules.getOp(prevStr);
-                    if (type != null) {
-                        symbols.add(new Symbol(new Position(new Location(line, column-prevStr.length()), new Location(line, column)), type, prevStr));
+                    else if (prevTypes[6]) {
+                        str = new StringBuilder("");
                     }
-                    str = new StringBuilder("");
-                    possibleTypes = new boolean[6];
+                    if (type != null) {
+                        int len = prevStr.length();
+                        if (type == C_STRING)
+                            len = oStrLen;
+                        symbols.add(new Symbol(new Position(new Location(line, column-len), new Location(line, column)), type, prevStr));
+                    }
+                    str = new StringBuilder();
+                    possibleTypes = new boolean[7];
                     if (!last) {
                         pos--;
                         column--;
                     }
                 } else if (TypeRules.isWt(str.toString())){
-                    str = new StringBuilder("");
-                    if (c == '\n') {
-                        column = 0;
-                        line++;
-                    } else if (c == '\t') {
-                        column += 4;
-                    }
+                    str = new StringBuilder();
                 } else
-                    Report.error(Position.fromLocation(new Location(line, column)), String.format("Lexeme %s does not match any type!", str.toString()));
+                    Report.error(Position.fromLocation(new Location(line, column)),
+                            String.format("Lexeme %s does not match any type!", str));
             }
             prevValid = curValid;
             prevTypes = possibleTypes.clone();
