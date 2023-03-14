@@ -72,15 +72,10 @@ public class Lexer {
             if (!last) {
                 c = this.source.charAt(pos);
                 str.append(c);
-            } else
+            } else if (!str.isEmpty())
                 c = str.charAt(0);
-
-            if (c == '\n') {
-                column = 0;
-                line++;
-            } else if (c == '\t') {
-                column += 4;
-            }
+            else
+                break;
 
             //if ((c < 32 || c > 126) && c != '\n' && c != '\r' && c != '\t')
             //    Report.error(Position.fromLocation(new Location(line, column)), String.format("Invalid character %c", c));
@@ -131,7 +126,7 @@ public class Lexer {
                             String tempStr = TypeRules.completeString(prevStr);
                             if (tempStr == null)
                                 Report.error(new Position(new Location(line, column-oStrLen), new Location(line, column)),
-                                        String.format("Incomplete string: %s", prevStr));
+                                        String.format("Incomplete string: %s", prevStr)); // TODO expand error messages to invalid characters etc.
                             else
                                 prevStr = tempStr;
                         }
@@ -141,7 +136,7 @@ public class Lexer {
                     else if (prevTypes[4])
                         type = TypeRules.getOp(prevStr);
                     else if (prevTypes[6]) {
-                        str = new StringBuilder("");
+                        str = new StringBuilder();
                     }
                     if (type != null) {
                         int len = prevStr.length();
@@ -151,7 +146,7 @@ public class Lexer {
                     }
                     str = new StringBuilder();
                     possibleTypes = new boolean[7];
-                    if (!last) {
+                    if (!last && c != '\n' && c != '\t') {
                         pos--;
                         column--;
                     }
@@ -163,8 +158,18 @@ public class Lexer {
             }
             prevValid = curValid;
             prevTypes = possibleTypes.clone();
+
+            if (c == '\n') {
+                column = 1;
+                line++;
+            } else if (c == '\t') {
+                column += 4-((column-1)%4);
+            } else
+                column++;
             pos++;
-            column++;
+            if (TypeRules.isWt(str.toString())){
+                str = new StringBuilder();
+            }
         }
         symbols.add(new Symbol(Position.fromLocation(new Location(line, column)), EOF, "$"));
         return symbols;
