@@ -4,17 +4,21 @@
  */
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Optional;
 
 import cli.PINS;
 import cli.PINS.Phase;
 import compiler.lexer.Lexer;
+import compiler.parser.Parser;
+import compiler.common.PrettyPrintVisitor1;
 
 public class Main {
     /**
      * Metoda, ki izvede celotni proces prevajanja.
-     * 
+     *
      * @param args parametri ukazne vrstice.
      */
     public static void main(String[] args) throws Exception {
@@ -42,6 +46,27 @@ public class Main {
             }
         }
         if (cli.execPhase == Phase.LEX) {
+            return;
+        }
+        /**
+         * Izvedi sintaksno analizo.
+         */
+        Optional<PrintStream> out = cli.dumpPhases.contains(Phase.SYN)
+                ? Optional.of(System.out)
+                : Optional.empty();
+        var parser = new Parser(symbols, out);
+        var ast = parser.parse();
+        if (cli.execPhase == Phase.SYN) {
+            return;
+        }
+        /**
+         * Abstraktna sintaksa.
+         */
+        var prettyPrint = new PrettyPrintVisitor1(2, System.out);
+        if (cli.dumpPhases.contains(Phase.AST)) {
+            ast.accept(prettyPrint);
+        }
+        if (cli.execPhase == Phase.AST) {
             return;
         }
     }

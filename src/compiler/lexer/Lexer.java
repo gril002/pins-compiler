@@ -163,7 +163,8 @@ public class Lexer {
                 column = 1;
                 line++;
             } else if (c == '\t') {
-                column += 4-((column-1)%4);
+                //column += 4-((column-1)%4); // "Correct" alignment to every 4 characters
+                column += 4;
             } else
                 column++;
             pos++;
