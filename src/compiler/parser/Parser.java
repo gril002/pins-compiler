@@ -11,10 +11,10 @@ import static common.RequireNonNull.requireNonNull;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import common.Report;
-import compiler.common.Visitor;
 import compiler.lexer.Position;
 import compiler.lexer.Symbol;
 import compiler.lexer.TokenType;
@@ -59,9 +59,7 @@ public class Parser {
      * Izpiše produkcijo na izhodni tok.
      */
     private void dump(String production) {
-        if (productionsOutputStream.isPresent()) {
-            productionsOutputStream.get().println(production);
-        }
+        productionsOutputStream.ifPresent(printStream -> printStream.println(production));
     }
 
     private boolean check(TokenType token) {
@@ -124,6 +122,7 @@ public class Parser {
                 if (check(OP_COLON)) {
                     skip();
                     Type type = parseType();
+                    assert type != null;
                     return new TypeDef(new Position(startLoc, type.position.end), name, type);
                 } else
                     syntaxError("a ':'", "type_definition -> typ id : type");
@@ -168,6 +167,7 @@ public class Parser {
                     if (check(OP_RBRACKET)) {
                         skip();
                         Type arrType = parseType();
+                        assert arrType != null;
                         return new Array(new Position(start, arrType.position.end), size, arrType);
                     } else
                         syntaxError("']'", "type -> [ int_constant ]");
@@ -216,11 +216,10 @@ public class Parser {
         return null;
     }
 
-    private Expr parseParameters(List<FunDef.Parameter> params) {
+    private void parseParameters(List<FunDef.Parameter> params) {
         dump("parameters -> parameter parameters_");
         params.add(parseParameter());
         parseParameters_(params);
-        return null;
     }
 
     private FunDef.Parameter parseParameter() {
@@ -232,6 +231,7 @@ public class Parser {
             if (check(OP_COLON)) {
                 skip();
                 Type type = parseType();
+                assert type != null;
                 return new FunDef.Parameter(new Position(start, type.position.end), name, type);
             } else
                 syntaxError("a ':'", "parameter -> id : type");
@@ -256,109 +256,86 @@ public class Parser {
         dump("expression -> logical_ior_expression expression_");
         Position.Location start = getCurTokenPos().start;
         Expr left = parseLogicalIorExpression(start);
-        Expr right = parseExpression_(start, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseExpression_(left);
     }
 
     private Expr parseLogicalIorExpression(Position.Location parentStart) {
         dump("logical_ior_expression -> logical_and_expression logical_ior_expression_");
         Expr left = parseLogicalAndExpression(parentStart);
-        Expr right = parseLogicalIorExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseLogicalIorExpression_(left);
     }
 
     private Expr parseLogicalAndExpression(Position.Location parentStart) {
         dump("logical_and_expression -> compare_expression logical_and_expression_");
         Expr left = parseCompareExpression(parentStart);
-        Expr right = parseLogicalAndExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseLogicalAndExpression_(left);
     }
 
     private Expr parseCompareExpression(Position.Location parentStart) {
         dump("compare_expression -> additive_expression compare_expression_");
         Expr left = parseAdditiveExpression(parentStart);
-        Expr right = parseCompareExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseCompareExpression_(left);
     }
 
     private Expr parseAdditiveExpression(Position.Location parentStart) {
         dump("additive_expression -> multiplicative_expression additive_expression_");
         Expr left = parseMultiplicativeExpression(parentStart);
-        Expr right = parseAdditiveExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseAdditiveExpression_(left);
     }
 
     private Expr parseMultiplicativeExpression(Position.Location parentStart) {
         dump("multiplicative_expression -> prefix_expression multiplicative_expression_");
         Expr left = parsePrefixExpression(parentStart);
-        Expr right = parseMultiplicativeExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        return parseMultiplicativeExpression_(left);
     }
 
     private Expr parsePrefixExpression(Position.Location parentStart) {
         if (check(OP_ADD)) {
             dump("prefix_expression -> + prefix_expression");
             skip();
-            Expr expr = parsePrefixExpression(parentStart);
+            Expr expr = parsePrefixExpression(getCurTokenPos().start);
             return new Unary(new Position(parentStart, expr.position.end), expr, Unary.Operator.ADD);
         } else if (check(OP_SUB)) {
             dump("prefix_expression -> - prefix_expression");
             skip();
-            Expr expr = parsePrefixExpression(parentStart);
+            Expr expr = parsePrefixExpression(getCurTokenPos().start);
             return new Unary(new Position(parentStart, expr.position.end), expr, Unary.Operator.SUB);
         } else if (check(OP_NOT)) {
             dump("prefix_expression -> ! prefix_expression");
             skip();
-            Expr expr = parsePrefixExpression(parentStart);
+            Expr expr = parsePrefixExpression(getCurTokenPos().start);
             return new Unary(new Position(parentStart, expr.position.end), expr, Unary.Operator.NOT);
         } else {
             dump("prefix_expression -> postfix_expression");
-           return parsePostfixExpression(parentStart);
+            return parsePostfixExpression(parentStart);
         }
     }
 
     private Expr parsePostfixExpression(Position.Location parentStart) {
         dump("postfix_expression -> atomic_expression postfix_expression_");
         Expr left = parseAtomicExpression(parentStart);
-        Expr right = parsePostfixExpression_(parentStart, left);
-        if (right == left || right == null)
-            return left;
-        else
-            return right; // FIXME Possibly done?
+        assert left != null;
+        return parsePostfixExpression_(left);
     }
 
     private Expr parseAtomicExpression(Position.Location parentStart) {
         Symbol symbol = getCurSymbol();
         if (check(IDENTIFIER)) {
             dump("atomic_expression -> identifier atomic_expression_");
+            String name = getCurSymbol().lexeme;
+            Position.Location end = getCurSymbol().position.end;
             skip();
-            return parseAtomicExpression_();
+            Expr expr = parseAtomicExpression_();
+            return Objects.requireNonNullElseGet(expr, () -> new Name(new Position(parentStart, end), name));
         } else if (check(OP_LPARENT)) {
             dump("atomic_expression -> ( expressions )");
             skip();
             List<Expr> exprList = new ArrayList<>();
             parseExpressions(exprList);
             if (check(OP_RPARENT)) {
+                Position.Location end = getCurTokenPos().end;
                 skip();
-                return new Block(new Position(parentStart, exprList.get(exprList.size()-1).position.end), exprList);
+                return new Block(new Position(symbol.position.start, end), exprList);
             } else
                 syntaxError("')'");
         } else if (check(OP_LBRACE)) {
@@ -381,19 +358,24 @@ public class Parser {
             syntaxError("an identifier, a '(', '{' or a constant: integer, logical or string",
                     "atomic_expression -> identifier atomic_expression_ | ( expressions ) | atomic_expression " +
                             "-> { atomic_expression___ | int_constant | logical_constant | str_constant");
-        return null; // FIXME Probably done
+        return null;
     }
 
     private Expr parseAtomicExpression_() {
         Position.Location start = getCurTokenPos().start;
         if (check(OP_LPARENT)) {
+            Symbol prev = symbols.get(pos-1);
             dump("atomic_expression_ -> ( expressions )");
             skip();
             List<Expr> exprList = new ArrayList<>();
             parseExpressions(exprList);
             if (check(OP_RPARENT)) {
+                Position.Location end = getCurTokenPos().end;
                 skip();
-                return new Block(new Position(start, exprList.get(exprList.size()).position.end), exprList);
+                if (prev.tokenType == IDENTIFIER)
+                    return new Call(new Position(prev.position.start, end), exprList, prev.lexeme);
+                else
+                    return new Block(new Position(start, exprList.get(exprList.size()-1).position.end), exprList);
             } else
                 syntaxError("')'");
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_LBRACKET) || check(OP_RBRACKET) || check(OP_RPARENT)
@@ -402,14 +384,15 @@ public class Parser {
                 check(OP_GT) || check(OP_ADD) || check(OP_SUB) || check(OP_MUL) || check(OP_DIV) || check(OP_MOD) ||
                 check(KW_THEN) || check(KW_ELSE) || check(EOF)) {
             dump("atomic_expression_ -> ε");
+
         } else
             syntaxError("a ';', ':', '[', ']', '(', ')', '=', ',', '{', '}', '|', '&', '==', '!=', " +
-                    "'<=', '>=', '<', '>', '+', '-', '*', '/', '%', the keywords 'THEN' and 'ELSE' and EOF",
+                            "'<=', '>=', '<', '>', '+', '-', '*', '/', '%', the keywords 'THEN' and 'ELSE' and EOF",
                     "atomic_expression_ -> ( expressions ) | ε");
-        return null; // FIXME Possibly done
+        return null;
     }
 
-    private Expr parseExpressions(List<Expr> exprList) {
+    private void parseExpressions(List<Expr> exprList) {
         if (check(IDENTIFIER) || check(OP_LPARENT) || check(OP_LBRACE) || check(OP_ADD) || check(OP_SUB)
                 || check(OP_NOT) || check(C_INTEGER) || check(C_LOGICAL) || check(C_STRING)) {
             dump("expressions -> expression expressions_");
@@ -418,10 +401,9 @@ public class Parser {
         } else
             syntaxError(" -> an identifier, a '(', '{', '+', '-', '!' or a constant: integer, logical or string",
                     "expressions -> expression expressions_");
-        return null; // FIXME
     }
 
-    private Expr parseExpressions_(List<Expr> exprList) {
+    private void parseExpressions_(List<Expr> exprList) {
         if (check(OP_COMMA)) {
             dump("definitions_ -> , expression expressions_");
             skip();
@@ -431,7 +413,6 @@ public class Parser {
             dump("definitions_ -> , ε");
         } else
             syntaxError("a ',' or ')'", "definitions_ -> , expression expressions_ | , ε");
-        return null;
     }
 
     private Expr parseAtomicExpression__(Position.Location parentStart) { // atom_expr4
@@ -445,18 +426,20 @@ public class Parser {
                 //parseAtomicExpression___();
 
                 if (check(KW_ELSE)) {
-                    dump("atomic_expression___ -> else expression }"); // TODO test if it still works correctly
+                    dump("atomic_expression___ -> else expression }");
                     skip();
                     Expr elseExpr = parseExpression();
                     if (check(OP_RBRACE)) {
+                        Position.Location end = getCurTokenPos().end;
                         skip();
-                        return new IfThenElse(new Position(parentStart, elseExpr.position.end), condition, thenExpr, elseExpr);
+                        return new IfThenElse(new Position(parentStart, end), condition, thenExpr, elseExpr);
                     } else
                         syntaxError("a '}'");
                 }
                 if (check(OP_RBRACE)) {
+                    Position.Location end = getCurTokenPos().end;
                     skip();
-                    return new IfThenElse(new Position(parentStart, thenExpr.position.end), condition, thenExpr);
+                    return new IfThenElse(new Position(parentStart, end), condition, thenExpr);
                 } else
                     syntaxError("a '}'");
             } else
@@ -469,8 +452,9 @@ public class Parser {
                 skip();
                 Expr expr = parseExpression();
                 if (check(OP_RBRACE)) {
+                    Position.Location end = getCurTokenPos().end;
                     skip();
-                    return new While(new Position(parentStart, expr.position.end), condition, expr);
+                    return new While(new Position(parentStart, end), condition, expr);
                 } else
                     syntaxError("a '}'");
             } else
@@ -494,8 +478,9 @@ public class Parser {
                                 skip();
                                 Expr expr = parseExpression();
                                 if (check(OP_RBRACE)) {
+                                    Position.Location end = getCurTokenPos().end;
                                     skip();
-                                    return new For(new Position(parentStart, expr.position.end), name ,low, high, step, expr);
+                                    return new For(new Position(parentStart, end), name ,low, high, step, expr);
                                 } else
                                     syntaxError("a '}'");
                             } else
@@ -525,27 +510,10 @@ public class Parser {
                 syntaxError("a '='");
         } else
             syntaxError(" -> an identifier, a '(', '{', '+', '-', '!' or constant: integer, logical or string");
-        return null; // FIXME
+        return null;
     }
 
-    /*
-    private Position.Location parseAtomicExpression___() { // atom_expr3
-        if (check(OP_RBRACE)) {
-            dump("atomic_expression___ -> }");
-            skip();
-        } else if (check(KW_ELSE)) {
-            dump("atomic_expression___ -> else expression }");
-            skip();
-            parseExpression();
-            if (check(OP_RBRACE)) {
-                skip();
-            } else
-                syntaxError("a '}'");
-        } else
-            syntaxError("a '}' or keyword 'ELSE'", "atomic_expression___ -> } | else expression");
-    }
-*/
-    private Expr parsePostfixExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parsePostfixExpression_(Expr parentLeft) {
         if (check(OP_LBRACKET)) {
             dump("postfix_expression_ -> [ expression ] postfix_expression_");
             skip();
@@ -553,8 +521,10 @@ public class Parser {
             if (check(OP_RBRACKET)) {
                 Position.Location end = getCurTokenPos().end;
                 skip();
-                Expr right = parsePostfixExpression_(parentStart, expr);
-                Binary bin = new Binary(new Position(parentStart, end), parentLeft, Binary.Operator.ARR, right);
+                Binary bin = new Binary(new Position(parentLeft.position.start, end), parentLeft, Binary.Operator.ARR, expr);
+                Expr right = parsePostfixExpression_(bin);
+                assert right != null;
+                return right;
             } else
                 syntaxError("a ']'");
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
@@ -568,27 +538,34 @@ public class Parser {
             syntaxError("a ';', ':', '', '[', ']', ')', '=', ',', '{', '}', '|', '&', '==', '!=', '<=', '>=', '<'," +
                     " '>', '+', '-', '*', '/', '%', the keywords 'THEN' or 'ELSE' or EOF");
         return null;
-    } // FIXME
+    }
 
-    private Expr parseMultiplicativeExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseMultiplicativeExpression_(Expr parentLeft) {
+        Position.Location parentStart = parentLeft.position.start;
         if (check(OP_MUL)) {
             dump("multiplicative_expression_ -> * prefix_expression multiplicative_expression_");
             skip();
-            Expr left = parsePrefixExpression(parentStart);
-            Expr right = parseMultiplicativeExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.MUL, right);
+            Expr left = parsePrefixExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentStart, left.position.end), parentLeft, Binary.Operator.MUL, left);
+            Expr right = parseMultiplicativeExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_DIV)) {
             dump("multiplicative_expression_ -> / prefix_expression multiplicative_expression_");
             skip();
-            Expr left = parsePrefixExpression(parentStart);
-            Expr right = parseMultiplicativeExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.DIV, right);
+            Expr left = parsePrefixExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentStart, left.position.end), parentLeft, Binary.Operator.DIV, left);
+            Expr right = parseMultiplicativeExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_MOD)) {
             dump("multiplicative_expression_ -> % prefix_expression multiplicative_expression_");
             skip();
-            Expr left = parsePrefixExpression(parentStart);
-            Expr right = parseMultiplicativeExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.MOD, right);
+            Expr left = parsePrefixExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentStart, left.position.end), parentLeft, Binary.Operator.MOD, left);
+            Expr right = parseMultiplicativeExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_LBRACE) || check(OP_RBRACE) || check(OP_OR) || check(OP_AND) || check(OP_EQ)
                 || check(OP_NEQ) || check(OP_LEQ)|| check(OP_GEQ) || check(OP_LT) || check(OP_GT) || check(OP_ADD)
@@ -598,22 +575,27 @@ public class Parser {
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', '|', '&', '==', '!=', '<=', '>=', '<'," +
                     " '>', '+', '-', '*', '/', '%', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME DONE?
+        return null;
     }
 
-    private Expr parseAdditiveExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseAdditiveExpression_(Expr parentLeft) {
+        Position.Location parentStart = parentLeft.position.start;
         if (check(OP_ADD)) {
             dump("additive_expression_ -> + multiplicative_expression additive_expression_");
             skip();
-            Expr left = parseMultiplicativeExpression(parentStart);
-            Expr right = parseAdditiveExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.ADD, right);
+            Expr left = parseMultiplicativeExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentStart, left.position.end), parentLeft, Binary.Operator.ADD, left);
+            Expr right = parseAdditiveExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_SUB)) {
             dump("additive_expression_ -> - multiplicative_expression additive_expression_");
             skip();
-            Expr left = parseMultiplicativeExpression(parentStart);
-            Expr right = parseAdditiveExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.SUB, right);
+            Expr left = parseMultiplicativeExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentStart, left.position.end), parentLeft, Binary.Operator.SUB, left);
+            Expr right = parseAdditiveExpression_(bin);
+            assert right != null;
+            return right;
         }  else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_LBRACE) || check(OP_RBRACE) || check(OP_OR) || check(OP_AND) || check(OP_EQ)
                 || check(OP_NEQ) || check(OP_LEQ)|| check(OP_GEQ) || check(OP_LT) || check(OP_GT) || check(KW_THEN)
@@ -623,39 +605,40 @@ public class Parser {
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', '|', '&', '==', '!=', '<=', '>=', '<'," +
                     " '>', '+', '-', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME
+        return null;
     }
 
-    private Expr parseCompareExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseCompareExpression_(Expr parentLeft) {
+        Position.Location parentStart = parentLeft.position.start;
         if (check(OP_EQ)) {
             dump("compare_expression_ -> == additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.EQ, right);
         } else if (check(OP_NEQ)) {
             dump("compare_expression_ -> != additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.NEQ, right);
         }  else if (check(OP_LEQ)) {
             dump("compare_expression_ -> <= additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.LEQ, right);
         } else if (check(OP_GEQ)) {
             dump("compare_expression_ -> >= additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.GEQ, right);
         } else if (check(OP_LT)) {
             dump("compare_expression_ -> < additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.LT, right);
         } else if (check(OP_GT)) {
             dump("compare_expression_ -> > additive_expression");
             skip();
-            Expr right = parseAdditiveExpression(parentStart);
+            Expr right = parseAdditiveExpression(getCurTokenPos().start);
             return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.GT, right);
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_LBRACE) || check(OP_RBRACE) || check(OP_OR) || check(OP_AND)
@@ -665,16 +648,18 @@ public class Parser {
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', '|', '&', '==', '!=', '<=', '>=', '<'," +
                     " '>', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME
+        return null;
     }
 
-    private Expr parseLogicalAndExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseLogicalAndExpression_(Expr parentLeft) {
         if (check(OP_AND)) {
             dump("logical_and_expression_ -> & compare_expression logical_and_expression_");
             skip();
-            Expr left = parseCompareExpression(parentStart);
-            Expr right = parseLogicalAndExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.AND, right);
+            Expr left = parseCompareExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentLeft.position.start, left.position.end), parentLeft, Binary.Operator.AND, left);
+            Expr right = parseLogicalAndExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_LBRACE) || check(OP_RBRACE) || check(OP_OR) || check(KW_THEN)
                 || check(KW_ELSE) || check(EOF) ) {
@@ -682,26 +667,28 @@ public class Parser {
             return parentLeft;
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', '|', '&', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME
+        return null;
     }
 
-    private Expr parseLogicalIorExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseLogicalIorExpression_(Expr parentLeft) {
         if (check(OP_OR)) {
             dump("logical_ior_expression_ -> | logical_and_expression logical_ior_expression_");
             skip();
-            Expr left = parseLogicalAndExpression(parentStart);
-            Expr right = parseLogicalIorExpression_(parentStart, left);
-            return new Binary(new Position(parentStart, right.position.end), parentLeft, Binary.Operator.OR, right);
+            Expr left = parseLogicalAndExpression(getCurTokenPos().start);
+            Binary bin = new Binary(new Position(parentLeft.position.start, left.position.end), parentLeft, Binary.Operator.OR, left);
+            Expr right = parseLogicalIorExpression_(bin);
+            assert right != null;
+            return right;
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_LBRACE) || check(OP_RBRACE) || check(KW_THEN) || check(KW_ELSE) || check(EOF) ) {
             dump("logical_and_expression_ -> ε");
             return parentLeft;
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', '|', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME
+        return null;
     }
 
-    private Expr parseExpression_(Position.Location parentStart, Expr parentLeft) {
+    private Expr parseExpression_(Expr parentLeft) {
         if (check(OP_LBRACE)) {
             dump("expression_ -> { WHERE definitions }");
             skip();
@@ -711,20 +698,18 @@ public class Parser {
                 if (check(OP_RBRACE)) {
                     Position.Location end = getCurTokenPos().end;
                     skip();
-                    return new Where(new Position(parentStart, end), parentLeft, defs);
+                    return new Where(new Position(parentLeft.position.start, end), parentLeft, defs);
                 } else
                     syntaxError("a '}'");
             } else
                 syntaxError("the keyword 'WHERE'");
         } else if (check(OP_SEMICOLON) || check(OP_COLON) || check(OP_RBRACKET) || check(OP_RPARENT) || check(OP_ASSIGN)
                 || check(OP_COMMA) || check(OP_RBRACE) || check(KW_THEN) || check(KW_ELSE) || check(EOF) ) {
-            {
-                dump("logical_and_expression_ -> ε");
-                return parentLeft;
-            }
+            dump("logical_and_expression_ -> ε");
+            return parentLeft;
         } else
             syntaxError("a ';', ':', '', ']', ')', '=', ',', '{', '}', the keywords 'THEN' or 'ELSE' or EOF");
-        return null; // FIXME
+        return null;
     }
 
     private Def parseVariableDefinition() {
@@ -738,6 +723,7 @@ public class Parser {
                 if (check(OP_COLON)) {
                     skip();
                     Type type = parseType();
+                    assert type != null;
                     return new VarDef(new Position(start, type.position.end), name, type);
                 } else
                     syntaxError("a ':'");
@@ -754,10 +740,12 @@ public class Parser {
             skip();
             defList.add(parseDefinition());
             return parseDefinitions_(parentStart, defList);
-        } else if (check(OP_RBRACE) || check(EOF)) {
+        } else if (check(OP_RBRACE)) {
             dump("definitions_ ->  ε");
-            Position.Location end = symbols.get(symbols.size()-2).position.end; // last char is EOF
-            return new Defs(new Position(parentStart, end), defList);
+            return new Defs(new Position(parentStart, defList.get(defList.size()-1).position.end), defList);
+        } else if (check(EOF)) {
+            dump("definitions_ ->  ε");
+            return new Defs(new Position(parentStart, defList.get(defList.size()-1).position.end), defList);
         } else
             syntaxError("a ';', '}' or EOF");
         return null;
