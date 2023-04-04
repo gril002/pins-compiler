@@ -1,0 +1,1 @@
+fun f( i : integer) : integer = ({x=10}, x) {where var x : integer}
