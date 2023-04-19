@@ -14,7 +14,6 @@ import cli.PINS.Phase;
 import compiler.common.PrettyPrintVisitor2;
 import compiler.lexer.Lexer;
 import compiler.parser.Parser;
-import compiler.common.PrettyPrintVisitor1;
 import compiler.parser.ast.def.Def;
 import compiler.seman.common.NodeDescription;
 import compiler.seman.name.NameChecker;
@@ -42,8 +41,8 @@ public class Main {
     }
 
     private static void run(PINS cli, String sourceCode) {
-        /**
-         * Izvedi leksikalno analizo.
+        /*
+          Izvedi leksikalno analizo.
          */
         var symbols = new Lexer(sourceCode).scan();
         if (cli.dumpPhases.contains(Phase.LEX)) {
@@ -54,7 +53,7 @@ public class Main {
         if (cli.execPhase == Phase.LEX) {
             return;
         }
-        /**
+        /*
          * Izvedi sintaksno analizo.
          */
         Optional<PrintStream> out = cli.dumpPhases.contains(Phase.SYN)
@@ -65,7 +64,7 @@ public class Main {
         if (cli.execPhase == Phase.SYN) {
             return;
         }
-        /**
+        /*
          * Abstraktna sintaksa.
          */
         var prettyPrint = new PrettyPrintVisitor2(2, System.out);
@@ -75,10 +74,10 @@ public class Main {
         if (cli.execPhase == Phase.AST) {
             return;
         }
-        /**
+        /*
          * Izvedi razreševanje imen.
          */
-        SymbolTable symbolTable = new FastSymbolTable();
+       SymbolTable symbolTable = new FastSymbolTable();
         var definitions = new NodeDescription<Def>();
         var nameChecker = new NameChecker(definitions, symbolTable);
         ast.accept(nameChecker);
