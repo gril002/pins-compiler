@@ -16,10 +16,7 @@ import compiler.parser.ast.type.*;
 import compiler.seman.common.NodeDescription;
 import compiler.seman.type.type.Type;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class TypeChecker implements Visitor {
@@ -236,9 +233,12 @@ public class TypeChecker implements Visitor {
         funDef.body.accept(this);
     }
 
+    HashSet<TypeDef> hs = new HashSet<TypeDef>();
     @Override
     public void visit(TypeDef typeDef) {
-        // TODO check for loops
+        if (hs.contains(typeDef))
+            Report.error(typeDef.position, String.format("Cyclical definition for type %s detected", typeDef.name));
+        hs.add(typeDef);
         typeDef.type.accept(this);
         Optional<Type> optType = types.valueFor(typeDef.type);
         optType.ifPresentOrElse(type -> {
@@ -277,6 +277,7 @@ public class TypeChecker implements Visitor {
 
     @Override
     public void visit(Atom atom) {
+        hs.clear();
         types.store(new Type.Atom(Type.Atom.Kind.valueOf(atom.type.name())), atom);
     }
 
