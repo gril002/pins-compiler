@@ -123,8 +123,13 @@ public class TypeChecker implements Visitor {
     @Override
     public void visit(For forLoop) {
         forLoop.counter.accept(this);
+        Optional<Type> typeOpt = types.valueFor(forLoop.counter);
+        typeOpt.ifPresentOrElse(type -> {
+            if (!type.isInt())
+                Report.error(forLoop.counter.position, "Counter in for loop must be of type integer");
+        }, () -> Report.error(forLoop.counter.position, "Counter type is not defined"));
         forLoop.low.accept(this);
-        Optional<Type> typeOpt = types.valueFor(forLoop.low);
+        typeOpt = types.valueFor(forLoop.low);
         typeOpt.ifPresentOrElse(type -> {
             if (!type.isInt())
                 Report.error(forLoop.low.position, "Low in for loop must be of type integer");
@@ -179,10 +184,25 @@ public class TypeChecker implements Visitor {
     @Override
     public void visit(Unary unary) {
         unary.expr.accept(this);
-        if (unary.operator.compareTo(Unary.Operator.ADD) == 0 || unary.operator.compareTo(Unary.Operator.SUB) == 0)
-            types.store(new Type.Atom(Type.Atom.Kind.INT), unary);
-        else if (unary.operator.compareTo(Unary.Operator.NOT) == 0)
+        if (unary.operator.compareTo(Unary.Operator.ADD) == 0 || unary.operator.compareTo(Unary.Operator.SUB) == 0) {
+            Optional<Type> optType = types.valueFor(unary.expr);
+            optType.ifPresentOrElse(type -> {
+                if (type.isInt())
+                    types.store(new Type.Atom(Type.Atom.Kind.INT), unary);
+                else
+                    Report.error(unary.position, "Unary operators '+' and '-' can only be used on integers");
+            }, () -> Report.error(unary.position, "Unary expression type is not defined"));
+        }
+        else if (unary.operator.compareTo(Unary.Operator.NOT) == 0) {
+            Optional<Type> optType = types.valueFor(unary.expr);
+            optType.ifPresentOrElse(type -> {
+                if (type.isLog())
+                    types.store(new Type.Atom(Type.Atom.Kind.LOG), unary);
+                else
+                    Report.error(unary.position, "Unary operator '!' can only be used on logicals");
+            }, () -> Report.error(unary.position, "Unary expression type is not defined"));
             types.store(new Type.Atom(Type.Atom.Kind.LOG), unary);
+        }
         else Report.error(unary.position, "Invalid unary operator");
     }
 
@@ -270,8 +290,7 @@ public class TypeChecker implements Visitor {
         Optional<Type> optType = types.valueFor(array.type);
         optType.ifPresentOrElse(type -> {
             types.store(new Type.Array(array.size, type), array);
-        }, () -> Report.error(array.position, String.format("Type %s of array is not defined", array.type))
-        );
+        }, () -> Report.error(array.position, String.format("Type %s of array is not defined", array.type)));
 
     }
 
