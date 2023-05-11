@@ -21,7 +21,6 @@ public abstract class Type {
 
     /**
      * Vrne velikost tipa, če je le-ta uporabljen kot parameter/argument.
-     * 
      * V primeru prenosa po referenci, je velikost tipa enaka
      * velikosti kazalca.
      */
@@ -123,12 +122,13 @@ public abstract class Type {
 
         @Override
         public int sizeInBytes() {
-            throw new RuntimeException("Implementiraj ...");
+
+            return kind.size;
         }
 
         @Override
         public int sizeInBytesAsParam() {
-            throw new RuntimeException("Implementiraj ...");
+            return kind.size;
         }
 
         @Override
@@ -179,12 +179,12 @@ public abstract class Type {
 
         @Override
         public int sizeInBytes() {
-            throw new RuntimeException("Implementiraj ...");
+            return size*type.sizeInBytes();
         }
 
         @Override
         public int sizeInBytesAsParam() {
-            throw new RuntimeException("Implementiraj ...");
+            return Constants.WordSize;
         }
 
         public int elementSizeInBytes() {
